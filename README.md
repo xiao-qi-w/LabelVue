@@ -1,5 +1,8 @@
 # labelvue
 
+## Abstract
+<font color="skyblue">A web-based image annotation tool inspired by LabelImg, built on the Vue framework.</font>
+
 ## Project setup
 ```
 npm install
