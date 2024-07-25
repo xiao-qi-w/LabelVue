@@ -13,7 +13,7 @@
         </el-button>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="handleCreate" :disabled="drawing">
+        <el-button type="primary" @click="handleCreate" :disabled="creating">
           <i class="el-icon-collection-tag"/>创建标记
         </el-button>
       </el-form-item>
@@ -48,7 +48,7 @@
               @mousedown="handleMouseDown"
               @mousemove="handleMouseMove"
               @mouseup="handleMouseUp"
-              :style="`${!drawing ? '' : 'cursor: crosshair'}`"/>
+              :style="`${!creating ? '' : 'cursor: crosshair'}`"/>
       <el-dialog width="20vw" title="标签命名">
         <el-form ref="tag">
           <el-form-item>
@@ -82,8 +82,8 @@
       </el-card>
       <el-card class="path-list">
         <h3>图片列表</h3>
-        <p>x: {{this.prevX}}</p>
-        <p>y: {{this.prevY}}</p>
+        <p>x: {{ this.prevX }}</p>
+        <p>y: {{ this.prevY }}</p>
         <!--        <ul class="tag-list">
                   <li v-for="(file, i) in files"
                       :key="i"
@@ -111,7 +111,7 @@ export default {
       ],
       /* 辅助变量 */
       currentImageIndex: 0,
-      drawing: false,
+      creating: false,
       /* 缩放相关 */
       dpr: 1,
       scale: 0,
@@ -165,7 +165,7 @@ export default {
       // 获取画布所在容器元素
       const container = this.$refs.marking;
       // 未设置缩放倍率
-      if(this.scale === 0) {
+      if (this.scale === 0) {
         // 获取所在容器宽高
         const width = container.clientWidth * this.dpr;
         const height = container.clientHeight * this.dpr;
@@ -207,7 +207,7 @@ export default {
     },
     // 处理创建标记事件
     handleCreate() {
-      this.drawing = !this.drawing;
+      this.creating = !this.creating;
     },
     // 鼠标按下
     handleMouseDown(e) {
@@ -215,60 +215,54 @@ export default {
       const mouseY = e.offsetY;
       this.prevX = mouseX;
       this.prevY = mouseY;
-      for(let i = this.rects.length - 1; i > -1; i--) {
+      // 找出被选中的矩形
+      for (let i = this.rects.length - 1; i > -1; i--) {
         const rect = this.rects[i];
-        if(rect.isPointInside(mouseX, mouseY)) {
+        if (rect.isSelected(mouseX, mouseY)) {
+          console.log("被选中的是矩形:", i);
           this.currentRect = rect;
           break;
         }
       }
-      if(this.currentRect) {
-        this.currentRect.mouseDown(e);
+      if (this.creating) {
+        // 新建
+        const bufferCtx = this.bufferCanvas.getContext('2d');
+        this.currentRect = new Rect(bufferCtx, this.dpr, mouseX, mouseY, this.scale);
+        this.rects.push(this.currentRect);
+      } else if (this.currentRect) {
+        // 拖动或缩放
+        this.currentRect.mouseDown(mouseX, mouseY);
       }
-      if (!this.drawing) return;
-      // 将离屏画布内容复制到主画布
-      const bufferCtx = this.bufferCanvas.getContext('2d');
-      this.currentRect = new Rect(bufferCtx, this.dpr, e.offsetX, e.offsetY, this.scale);
-      this.rects.push(this.currentRect);
     },
     // 鼠标移动
     handleMouseMove(e) {
-      // 将离屏画布内容复制到主画布
-      const ctx = this.canvas.getContext('2d');
-      const bufferCtx = this.bufferCanvas.getContext('2d');
-      if(this.currentRect) {
-        this.currentRect.mouseMove(e, this);
-        // 清除离屏画布并重新绘制
-        bufferCtx.clearRect(0, 0, this.bufferCanvas.width, this.bufferCanvas.height);
-        this.currentRect.draw(); // 绘制当前矩形
-        this.drawCanvas(); // 绘制背景和已有矩形
-
-        ctx.drawImage(this.bufferCanvas, 0, 0);
-      }
-      if (!this.drawing) return;
-      // 清除之前的辅助线
-      ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      ctx.drawImage(this.bufferCanvas, 0, 0);
       // 获取鼠标在Canvas中的坐标
       const mouseX = e.offsetX;
       const mouseY = e.offsetY;
-      // 绘制交叉辅助线
-      ctx.beginPath();
-      ctx.moveTo(mouseX * this.dpr, 0);
-      ctx.lineTo(mouseX * this.dpr, this.canvas.height);
-      ctx.moveTo(0, mouseY * this.dpr);
-      ctx.lineTo(this.canvas.width, mouseY * this.dpr);
-      ctx.strokeStyle = 'red'; // 设置线条颜色
-      ctx.stroke();
-
-      if (!this.currentRect) return;
-      this.currentRect.endX = mouseX;
-      this.currentRect.endY = mouseY;
+      const ctx = this.canvas.getContext('2d');
+      const bufferCtx = this.bufferCanvas.getContext('2d');
+      if (this.creating) {
+        // 新建
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.drawImage(this.bufferCanvas, 0, 0);
+        // 绘制交叉辅助线
+        ctx.beginPath();
+        ctx.moveTo(mouseX * this.dpr, 0);
+        ctx.lineTo(mouseX * this.dpr, this.canvas.height);
+        ctx.moveTo(0, mouseY * this.dpr);
+        ctx.lineTo(this.canvas.width, mouseY * this.dpr);
+        ctx.strokeStyle = 'red'; // 设置线条颜色
+        ctx.stroke();
+        if (!this.currentRect) return;
+        this.currentRect.maxX = mouseX;
+        this.currentRect.maxY = mouseY;
+      } else if (this.currentRect) {
+        // 拖动或缩放
+        this.currentRect.mouseMove(e, this);
+      }
       // 清除离屏画布并重新绘制
-      bufferCtx.clearRect(0, 0, this.bufferCanvas.width, this.bufferCanvas.height);
-      this.currentRect.draw(); // 绘制当前矩形
+      bufferCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       this.drawCanvas(); // 绘制背景和已有矩形
-
       ctx.drawImage(this.bufferCanvas, 0, 0);
     },
     // 鼠标抬起
@@ -276,19 +270,17 @@ export default {
       // 将离屏画布内容复制到主画布
       const ctx = this.canvas.getContext('2d');
       const bufferCtx = this.bufferCanvas.getContext('2d');
-      if(this.currentRect) {
-        this.currentRect.mouseUp(e);
-        bufferCtx.clearRect(0, 0, this.bufferCanvas.width, this.bufferCanvas.height);
-        this.drawCanvas(); // 绘制背景和已有矩形
-        ctx.drawImage(this.bufferCanvas, 0, 0);
+      if (this.creating) {
+        // 新建
+        this.currentRect.maxX = e.offsetX;
+        this.currentRect.maxY = e.offsetY;
+        this.creating = false;
+      } else if (this.currentRect) {
+        // 拖动或缩放
+        this.currentRect.mouseUp(e, this);
       }
-      if (!this.drawing) return;
-      this.currentRect.endX = e.offsetX;
-      this.currentRect.endY = e.offsetY;
-      // 保存当前矩形
-      this.drawing = false;
       // 最后绘制
-      bufferCtx.clearRect(0, 0, this.bufferCanvas.width, this.bufferCanvas.height);
+      bufferCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       this.drawCanvas(); // 绘制背景和已有矩形
       ctx.drawImage(this.bufferCanvas, 0, 0);
       // 清除 currentRect 以便重新开始绘制新的矩形
