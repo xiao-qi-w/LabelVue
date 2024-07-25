@@ -106,9 +106,8 @@ export default {
     return {
       /* 图片相关 */
       files: [
-        require('E:\\郭家旗\\Pictures\\Saved Pictures\\cat.jpg'),
-        require('E:\\郭家旗\\Pictures\\Saved Pictures\\bay.jpg'),
-        require('E:\\郭家旗\\Pictures\\Saved Pictures\\dusk.jpg')
+        require('@/assets/cat.jpg'),
+        require('@/assets/bay.jpg')
       ],
       /* 辅助变量 */
       currentImageIndex: 0,
@@ -313,6 +312,7 @@ export default {
     handleImageToggle(offset) {
       const length = this.files.length;
       this.currentImageIndex = (this.currentImageIndex + offset + length) % length;
+      this.scale = 0;
       this.loadImage();
     },
     // 上一张
