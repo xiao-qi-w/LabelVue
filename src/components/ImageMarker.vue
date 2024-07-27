@@ -3,12 +3,12 @@
     <!-- 工具栏或控制栏 -->
     <el-form class="sidebar-left">
       <el-form-item>
-        <el-button type="primary" @click="prevImage">
+        <el-button type="primary" @click="handleImageToggle(-1)">
           <i class="el-icon-caret-left"/>上一张
         </el-button>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="nextImage">
+        <el-button type="primary" @click="handleImageToggle(1)">
           <i class="el-icon-caret-right"/>下一张
         </el-button>
       </el-form-item>
@@ -28,13 +28,18 @@
         </el-button>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="zoomIn" :disabled="this.scale >= this.maxScale">
+        <el-button type="primary" @click="zoom(scaleStep, false)" :disabled="this.scale >= this.maxScale">
           <i class="el-icon-zoom-in"/>放大
         </el-button>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="zoomOut" :disabled="this.scale <= this.minScale">
+        <el-button type="primary" @click="zoom(-scaleStep, false)" :disabled="this.scale <= this.minScale">
           <i class="el-icon-zoom-out"/>缩小
+        </el-button>
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" @click="zoom(0, true)">
+          <i class="el-icon-zoom-out"/>自适应
         </el-button>
       </el-form-item>
       <el-form-item>
@@ -43,23 +48,11 @@
       </el-form-item>
     </el-form>
     <!-- 展示图片的地方 -->
-    <div ref="marking" class="main-content">
+    <div ref="wrapper" class="canvas-wrapper">
       <canvas ref="canvas"
               @mousedown="handleMouseDown"
               @mousemove="handleMouseMove"
-              @mouseup="handleMouseUp"
-              :style="`${!creating ? '' : 'cursor: crosshair'}`"/>
-      <el-dialog width="20vw" title="标签命名">
-        <el-form ref="tag">
-          <el-form-item>
-            <el-input placeholder="请输入或选择已有标签名"/>
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary">确认</el-button>
-            <el-button>取消</el-button>
-          </el-form-item>
-        </el-form>
-      </el-dialog>
+              @mouseup="handleMouseUp"/>
     </div>
     <!-- 右侧信息展示栏 -->
     <div class="sidebar-right">
@@ -82,8 +75,8 @@
       </el-card>
       <el-card class="path-list">
         <h3>图片列表</h3>
-        <p>x: {{ this.prevX }}</p>
-        <p>y: {{ this.prevY }}</p>
+        <p>x: {{ this.currentX }}</p>
+        <p>y: {{ this.currentY }}</p>
         <!--        <ul class="tag-list">
                   <li v-for="(file, i) in files"
                       :key="i"
@@ -94,6 +87,18 @@
                 </ul>-->
       </el-card>
     </div>
+    <!-- 标签命名弹窗 -->
+    <el-dialog ref="myDialog" width="20vw" title="标签命名" :visible.sync="showNameInput" :modal="false">
+      <el-form ref="tag">
+        <el-form-item>
+          <el-input placeholder="请输入或选择已有标签名" v-model="labelName"/>
+        </el-form-item>
+        <el-form-item>
+          <el-button @click="showNameInput = false" type="primary">确认</el-button>
+          <el-button @click="showNameInput = false">取消</el-button>
+        </el-form-item>
+      </el-form>
+    </el-dialog>
   </div>
 </template>
 
@@ -105,37 +110,43 @@ export default {
   data() {
     return {
       /* 图片相关 */
-      files: [
+      images: [
         require('@/assets/cat.jpg'),
         require('@/assets/bay.jpg')
       ],
-      /* 辅助变量 */
       currentImageIndex: 0,
+      /* 状态变量 */
       creating: false,
+      canvasChanged: false,
+      showNameInput: false,
+      showAlert: false,
       /* 缩放相关 */
       dpr: 1,
       scale: 0,
       maxScale: 3.0,
-      minScale: 0.5,
+      minScale: 0.1,
+      adaptiveScale: 0,
       scaleStep: 0.1,
       // 鼠标上一刻所在位置
       prevX: 0,
       prevY: 0,
+      // 鼠标实时位置
+      currentX: 0,
+      currentY: 0,
       /* 缓存 */
-      image: null,
-      currentRect: null,
+      currentImage: null,
+      wrapper: null,
       canvas: null,
       bufferCanvas: null,
+      currentRect: null,
+      currentRectIndex: 0,
+      labelName: "", // 矩形标签
       rects: [], // 保存所有绘制的矩形
+      labels: [], // 保存所有矩形标签
     };
   },
   mounted() {
-    this.dpr = window.devicePixelRatio || 1;
-    // 获取画布
-    this.canvas = this.$refs.canvas;
-    // 创建离屏画布
-    this.bufferCanvas = document.createElement('canvas');
-    this.loadImage();
+    this.init();
     // 添加浏览器窗口大小事件
     window.addEventListener("resize", this.loadImage);
   },
@@ -144,40 +155,49 @@ export default {
     window.removeEventListener("resize", this.loadImage);
   },
   computed: {
-    imgPath() {
-      return this.files[this.currentImageIndex];
+    imagePath() {
+      return this.images[this.currentImageIndex];
     },
   },
   methods: {
+    // 初始化
+    init() {
+      // 设置分辨率
+      this.dpr = window.devicePixelRatio || 1;
+      // 获取画布及其所在容器元素
+      this.canvas = this.$refs.canvas;
+      this.wrapper = this.$refs.wrapper;
+      // 创建离屏画布
+      this.bufferCanvas = document.createElement('canvas');
+      this.loadImage();
+    },
     // 加载当前图片
     loadImage() {
-      this.image = new Image();
-      this.image.src = this.imgPath;
-      this.image.onload = () => {
-        this.image.width *= this.dpr;
-        this.image.height *= this.dpr;
+      this.currentImage = new Image();
+      this.currentImage.src = this.imagePath;
+      this.currentImage.onload = () => {
+        this.currentImage.width *= this.dpr;
+        this.currentImage.height *= this.dpr;
         this.setSize();
         this.drawCanvas();
       };
     },
     // 设置画布大小
     setSize() {
-      // 获取画布所在容器元素
-      const container = this.$refs.marking;
       // 未设置缩放倍率
       if (this.scale === 0) {
         // 获取所在容器宽高
-        const width = container.clientWidth * this.dpr;
-        const height = container.clientHeight * this.dpr;
+        const width = this.wrapper.clientWidth * this.dpr;
+        const height = this.wrapper.clientHeight * this.dpr;
         // 计算缩放比例
-        const scaleX = width / this.image.width;
-        const scaleY = height / this.image.height;
+        const scaleX = width / this.currentImage.width;
+        const scaleY = height / this.currentImage.height;
         this.scale = Math.min(scaleX, scaleY);
-        this.minScale = this.scale;
+        this.adaptiveScale = this.scale;
       }
       // 计算缩放后的图片尺寸
-      const scaledWidth = this.image.width * this.scale;
-      const scaledHeight = this.image.height * this.scale;
+      const scaledWidth = this.currentImage.width * this.scale;
+      const scaledHeight = this.currentImage.height * this.scale;
       // 设置画布宽高
       this.canvas.width = scaledWidth;
       this.canvas.height = scaledHeight;
@@ -188,6 +208,16 @@ export default {
       this.bufferCanvas.height = scaledHeight;
       this.bufferCanvas.style.width = `${scaledWidth / this.dpr}px`;
       this.bufferCanvas.style.height = `${scaledHeight / this.dpr}px`;
+      // 设置布局
+      if (this.wrapper.clientHeight <= scaledHeight) {
+        // 画布高度超过父元素视窗高度时，取消居中设置
+        this.wrapper.style.justifyContent = '';
+        this.wrapper.style.alignItems = '';
+      } else {
+        // 画布高度未超过父元素视窗高度时，重新居中设置
+        this.wrapper.style.justifyContent = 'center';
+        this.wrapper.style.alignItems = 'center';
+      }
     },
     // 绘制画布
     drawCanvas() {
@@ -197,7 +227,7 @@ export default {
       const height = this.canvas.height;
       // 绘制缩放后的图片到离屏画布
       bufferCtx.clearRect(0, 0, width, height);
-      bufferCtx.drawImage(this.image, 0, 0, width, height);
+      bufferCtx.drawImage(this.currentImage, 0, 0, width, height);
       // 绘制已创建矩形
       for (const rect of this.rects) {
         rect.draw(this.scale);
@@ -219,7 +249,6 @@ export default {
       for (let i = this.rects.length - 1; i > -1; i--) {
         const rect = this.rects[i];
         if (rect.isSelected(mouseX, mouseY)) {
-          console.log("被选中的是矩形:", i);
           this.currentRect = rect;
           break;
         }
@@ -239,6 +268,8 @@ export default {
       // 获取鼠标在Canvas中的坐标
       const mouseX = e.offsetX;
       const mouseY = e.offsetY;
+      this.currentX = mouseX;
+      this.currentY = mouseY;
       const ctx = this.canvas.getContext('2d');
       const bufferCtx = this.bufferCanvas.getContext('2d');
       if (this.creating) {
@@ -260,10 +291,13 @@ export default {
         // 拖动或缩放
         this.currentRect.mouseMove(e, this);
       }
-      // 清除离屏画布并重新绘制
-      bufferCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      this.drawCanvas(); // 绘制背景和已有矩形
-      ctx.drawImage(this.bufferCanvas, 0, 0);
+      // 画布状态发生变化重新渲染
+      if(this.creating || this.currentRect) {
+        // 清除离屏画布并重新绘制
+        bufferCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.drawCanvas(); // 绘制背景和已有矩形
+        ctx.drawImage(this.bufferCanvas, 0, 0);
+      }
     },
     // 鼠标抬起
     handleMouseUp(e) {
@@ -275,6 +309,18 @@ export default {
         this.currentRect.maxX = e.offsetX;
         this.currentRect.maxY = e.offsetY;
         this.creating = false;
+        this.showNameInput = true;
+        // 使用 Vue 的 $nextTick 来确保 DOM 已经更新
+        // this.$nextTick(() => {
+        //   // 找到对话框的 DOM 元素
+        //   const dialog = this.$refs.myDialog.$el;
+        //   // 设置对话框的位置，以左上角为基准调整偏移量
+        //   dialog.style.position = 'absolute';
+        //   dialog.style.top = e.offsetY + 'px';
+        //   dialog.style.left = e.offsetX + 'px';
+        //
+        //   // 如果需要，你还可以添加过渡效果等
+        // });
       } else if (this.currentRect) {
         // 拖动或缩放
         this.currentRect.mouseUp(e, this);
@@ -286,51 +332,31 @@ export default {
       // 清除 currentRect 以便重新开始绘制新的矩形
       this.currentRect = null;
     },
-    // 点击放大按钮
-    zoomIn() {
-      if (this.scale < this.maxScale) {
-        this.scale = Math.min(this.scale + this.scaleStep, this.maxScale);
-        this.loadImage();
+    // 图片缩放
+    zoom(step, fit) {
+      if(fit) {
+        // 自适应
+        this.scale = this.adaptiveScale;
+      } else {
+        this.scale += step;
+        // 放大
+        if (this.scale > this.maxScale) {
+          this.scale = this.maxScale;
+        }
+        // 缩小
+        if(this.scale < this.minScale) {
+          this.scale = this.minScale;
+        }
       }
-    },
-    // 点击缩小按钮
-    zoomOut() {
-      if (this.scale > this.minScale) {
-        this.scale = Math.max(this.scale - this.scaleStep, this.minScale);
-        this.loadImage();
-      }
+      this.loadImage();
     },
     // 图片切换
     handleImageToggle(offset) {
-      const length = this.files.length;
+      this.rects.length = 0;
+      const length = this.images.length;
       this.currentImageIndex = (this.currentImageIndex + offset + length) % length;
       this.scale = 0;
       this.loadImage();
-    },
-    // 上一张
-    prevImage() {
-      this.handleImageToggle(-1);
-    },
-    // 下一张
-    nextImage() {
-      this.handleImageToggle(1);
-      /*if (this.alterRect) {
-        this.$confirm('是否保存对标记的更改?', '提示', {
-          confirmButtonText: '确定',
-          cancelButtonText: '取消',
-          type: 'warning',
-        }).then(() => {
-          // 持久化对应标签
-          this.handleSaveTag();
-          this.handleImageToggle(1);
-        }).catch(() => {
-          console.log("已取消操作");
-          this.handleImageToggle(1);
-        });
-        this.alterRect = false;
-      } else {
-        this.handleImageToggle(1);
-      }*/
     },
   }
 };
@@ -356,13 +382,12 @@ export default {
   flex: 15%; /* 固定宽度的侧边栏 */
 }
 
-.main-content {
+.canvas-wrapper {
   flex: 65%; /* 占据剩余空间 */
   height: 94vh;
   margin-top: 3vh;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   overflow: auto;
   border-right: 1px solid #ccc;
   border-bottom: 1px solid #ccc;

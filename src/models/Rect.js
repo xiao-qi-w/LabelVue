@@ -8,9 +8,10 @@ export default class Rect {
     this.maxX = startX;
     this.maxY = startY;
     this.scale = scale;
+    this.realScale = scale;
     this.dragging = false;
     this.resizing = false;
-    this.vertexSize = 8;
+    this.vertexSize = 8 * dpr;
     this.vertexIndex = -1;
   }
 
@@ -39,11 +40,12 @@ export default class Rect {
     if (this.minX === this.maxX || this.minY === this.maxY) {
       return;
     }
-    const realScale = 1 / this.scale * scale * this.dpr;
-    const minX = this.minX * realScale;
-    const minY = this.minY * realScale;
-    const maxX = this.maxX * realScale;
-    const maxY = this.maxY * realScale;
+    this.realScale = 1 / this.scale * scale;
+    const factor = this.realScale * this.dpr;
+    const minX = this.minX * factor;
+    const minY = this.minY * factor;
+    const maxX = this.maxX * factor;
+    const maxY = this.maxY * factor;
     this.ctx.beginPath();
     this.ctx.moveTo(minX, minY);
     this.ctx.lineTo(maxX, minY);
@@ -73,7 +75,7 @@ export default class Rect {
     } else {
       this.ctx.fillStyle = '#A7FC00'; // 正常状态，青色顶点
     }
-    const size = this.vertexSize * this.dpr;
+    const size = this.vertexSize;
     this.ctx.fillRect(minX - size / 2, minY - size / 2, size, size);
     this.ctx.fillRect(maxX - size / 2, minY - size / 2, size, size);
     this.ctx.fillRect(maxX - size / 2, maxY - size / 2, size, size);
@@ -95,6 +97,8 @@ export default class Rect {
    * @param y 纵坐标
    */
   isPointInside(x, y) {
+    x = x / this.realScale;
+    y = y / this.realScale;
     return x >= this.minX && x <= this.maxX && y >= this.minY && y <= this.maxY;
   }
 
@@ -104,13 +108,15 @@ export default class Rect {
    * @param y
    */
   isPointInsideVertex(x, y) {
+    x = x / this.realScale;
+    y = y / this.realScale;
     const vertices = [
       {x: this.minX, y: this.minY},
       {x: this.maxX, y: this.minY},
       {x: this.maxX, y: this.maxY},
       {x: this.minX, y: this.maxY}
     ];
-    const size = this.vertexSize / 2 * this.dpr;
+    const size = this.vertexSize / 2;
     let index = -1;
     for (let i = 0; i < vertices.length; i++) {
       const vx = vertices[i].x;
@@ -149,31 +155,35 @@ export default class Rect {
       // 拖动矩形
       const deltaX = mouseX - that.prevX;
       const deltaY = mouseY - that.prevY;
-      this.minX += deltaX;
-      this.minY += deltaY;
-      this.maxX += deltaX;
-      this.maxY += deltaY;
+      const scaledDeltaX = (mouseX - that.prevX) / this.realScale;
+      const scaledDeltaY = (mouseY - that.prevY) / this.realScale;
+      this.minX += scaledDeltaX;
+      this.minY += scaledDeltaY;
+      this.maxX += scaledDeltaX;
+      this.maxY += scaledDeltaY;
       that.prevX += deltaX;
       that.prevY += deltaY;
     }
     if (this.resizing) {
       // 缩放矩形
+      const scaledX = mouseX / this.realScale;
+      const scaledY = mouseY / this.realScale;
       switch (this.vertexIndex) {
         case 0: // 左上角顶点
-          this.minX = mouseX;
-          this.minY = mouseY;
+          this.minX = scaledX;
+          this.minY = scaledY;
           break;
         case 1: // 右上角顶点
-          this.maxX = mouseX;
-          this.minY = mouseY;
+          this.maxX = scaledX;
+          this.minY = scaledY;
           break;
         case 2: // 右下角顶点
-          this.maxX = mouseX;
-          this.maxY = mouseY;
+          this.maxX = scaledX;
+          this.maxY = scaledY;
           break;
         case 3: // 左下角顶点
-          this.minX = mouseX;
-          this.maxY = mouseY;
+          this.minX = scaledX;
+          this.maxY = scaledY;
           break;
       }
     }
