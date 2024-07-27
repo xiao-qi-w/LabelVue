@@ -1,5 +1,6 @@
 export default class Rect {
   constructor(ctx, dpr, startX, startY, scale) {
+    /* 绘制相关 */
     this.ctx = ctx;
     this.dpr = dpr;
     this.color = 'rgba(0, 0, 255, 0.3)';
@@ -7,11 +8,14 @@ export default class Rect {
     this.minY = startY;
     this.maxX = startX;
     this.maxY = startY;
+    this.vertexSize = 8 * dpr;
+    /* 缩放相关 */
     this.scale = scale;
     this.realScale = scale;
+    /* 状态相关 */
     this.dragging = false;
     this.resizing = false;
-    this.vertexSize = 8 * dpr;
+    this.changed = true;
     this.vertexIndex = -1;
   }
 
@@ -130,6 +134,26 @@ export default class Rect {
   }
 
   /**
+   * 归一化为 yolo 格式
+   * @param width 所在图片宽度
+   * @param height 所在图片高度
+   */
+  normalize(width, height) {
+    const scaledWidth = width * this.scale / this.dpr;
+    const scaledHeight = height * this.scale / this.dpr;
+    const rectWidth = (this.maxX - this.minX) / scaledWidth;
+    const rectHeight = (this.maxY - this.minY) / scaledHeight;
+    const centerX = (this.maxX + this.minX) / 2 / scaledWidth;
+    const centerY = (this.maxY + this.minY) / 2 / scaledHeight;
+    return {
+      x: centerX,
+      y: centerY,
+      w: rectWidth,
+      h: rectHeight,
+    }
+  }
+
+  /**
    * 鼠标按下事件，按下坐标(x, y)
    * @param x
    * @param y
@@ -152,6 +176,7 @@ export default class Rect {
     const mouseX = e.offsetX;
     const mouseY = e.offsetY;
     if (this.dragging) {
+      this.changed = true;
       // 拖动矩形
       const deltaX = mouseX - that.prevX;
       const deltaY = mouseY - that.prevY;
@@ -165,6 +190,7 @@ export default class Rect {
       that.prevY += deltaY;
     }
     if (this.resizing) {
+      this.changed = true;
       // 缩放矩形
       const scaledX = mouseX / this.realScale;
       const scaledY = mouseY / this.realScale;
@@ -192,12 +218,19 @@ export default class Rect {
 
   /**
    * 鼠标抬起事件
-   * @param e 鼠标事件
-   * @param that vue组件
+   * @param width 所在图片宽度
+   * @param height 所在图片高度
    */
-  mouseUp(e, that) {
+  mouseUp(width, height) {
     this.dragging = false;
     this.resizing = false;
     this.adjustCoordinate();
+    // 避免缩放过程中把矩形缩成看不见的一点
+    if (this.minX === this.maxX) {
+      this.maxX += 1;
+    }
+    if(this.minY === this.maxY) {
+      this.maxY += 1;
+    }
   }
 }

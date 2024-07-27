@@ -3,42 +3,42 @@
     <!-- 工具栏或控制栏 -->
     <el-form class="sidebar-left">
       <el-form-item>
-        <el-button type="primary" @click="handleImageToggle(-1)">
+        <el-button type="primary" @click="handleImageSwitch(-1)">
           <i class="el-icon-caret-left"/>上一张
         </el-button>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="handleImageToggle(1)">
+        <el-button type="primary" @click="handleImageSwitch(1)">
           <i class="el-icon-caret-right"/>下一张
         </el-button>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="handleCreate" :disabled="creating">
+        <el-button type="primary" @click="creating = !creating" :disabled="creating">
           <i class="el-icon-collection-tag"/>创建标记
         </el-button>
       </el-form-item>
       <el-form-item>
-        <el-button type="danger">
+        <el-button type="danger" @click="handleDeleteLabel">
           <i class="el-icon-collection-tag"/>删除标记
         </el-button>
       </el-form-item>
       <el-form-item>
-        <el-button type="success">
+        <el-button type="success" @click="handleSaveLabel">
           <i class="el-icon-download"/>保存标记
         </el-button>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="zoom(scaleStep, false)" :disabled="this.scale >= this.maxScale">
+        <el-button type="primary" @click="zoom(scale + scaleStep)" :disabled="this.scale >= this.maxScale">
           <i class="el-icon-zoom-in"/>放大
         </el-button>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="zoom(-scaleStep, false)" :disabled="this.scale <= this.minScale">
+        <el-button type="primary" @click="zoom(scale - scaleStep)" :disabled="this.scale <= this.minScale">
           <i class="el-icon-zoom-out"/>缩小
         </el-button>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="zoom(0, true)">
+        <el-button type="primary" @click="zoom(adaptiveScale)">
           <i class="el-icon-zoom-out"/>自适应
         </el-button>
       </el-form-item>
@@ -91,11 +91,33 @@
     <el-dialog ref="myDialog" width="20vw" title="标签命名" :visible.sync="showNameInput" :modal="false">
       <el-form ref="tag">
         <el-form-item>
-          <el-input placeholder="请输入或选择已有标签名" v-model="labelName"/>
+          <el-select
+              v-model="labelName"
+              filterable
+              allow-create
+              default-first-option
+              placeholder="请输入或选择已有标签名">
+            <el-option
+                v-for="item in labels"
+                :key="item.name"
+                :label="item.name"
+                :value="item.name">
+            </el-option>
+          </el-select>
         </el-form-item>
         <el-form-item>
           <el-button @click="showNameInput = false" type="primary">确认</el-button>
           <el-button @click="showNameInput = false">取消</el-button>
+        </el-form-item>
+      </el-form>
+    </el-dialog>
+    <!-- 提示保存弹窗 -->
+    <el-dialog width="20vw" title="是否保存改动？" :visible.sync="showSaveAlert" :modal="false">
+      <el-form ref="tag">
+        <el-form-item>
+          <el-button @click="showSaveAlert = false" type="success">是</el-button>
+          <el-button @click="showSaveAlert = false" type="danger">否</el-button>
+          <el-button @click="showSaveAlert = false">取消</el-button>
         </el-form-item>
       </el-form>
     </el-dialog>
@@ -119,7 +141,7 @@ export default {
       creating: false,
       canvasChanged: false,
       showNameInput: false,
-      showAlert: false,
+      showSaveAlert: false,
       /* 缩放相关 */
       dpr: 1,
       scale: 0,
@@ -127,10 +149,10 @@ export default {
       minScale: 0.1,
       adaptiveScale: 0,
       scaleStep: 0.1,
-      // 鼠标上一刻所在位置
+      /* 鼠标上一刻所在位置 */
       prevX: 0,
       prevY: 0,
-      // 鼠标实时位置
+      /* 鼠标实时位置 */
       currentX: 0,
       currentY: 0,
       /* 缓存 */
@@ -139,7 +161,7 @@ export default {
       canvas: null,
       bufferCanvas: null,
       currentRect: null,
-      currentRectIndex: 0,
+      currentRectIndex: -1,
       labelName: "", // 矩形标签
       rects: [], // 保存所有绘制的矩形
       labels: [], // 保存所有矩形标签
@@ -229,27 +251,35 @@ export default {
       bufferCtx.clearRect(0, 0, width, height);
       bufferCtx.drawImage(this.currentImage, 0, 0, width, height);
       // 绘制已创建矩形
+      if(this.currentRect) {
+        this.currentRect.draw(this.scale);
+      }
       for (const rect of this.rects) {
         rect.draw(this.scale);
       }
       // 将缩放后的图片绘制到主画布
       ctx.drawImage(this.bufferCanvas, 0, 0, width, height);
     },
-    // 处理创建标记事件
-    handleCreate() {
-      this.creating = !this.creating;
-    },
-    // 鼠标按下
+    /**
+     * 鼠标按下
+     * @param e 鼠标事件
+     */
     handleMouseDown(e) {
       const mouseX = e.offsetX;
       const mouseY = e.offsetY;
       this.prevX = mouseX;
       this.prevY = mouseY;
       // 找出被选中的矩形
+      this.currentRect = null;
+      if(this.currentRectIndex !== -1) {
+        this.rects[this.currentRectIndex].color = 'rgba(0, 0, 255, 0.3)';
+      }
       for (let i = this.rects.length - 1; i > -1; i--) {
         const rect = this.rects[i];
         if (rect.isSelected(mouseX, mouseY)) {
+          rect.color = 'rgba(255, 0, 0, 0.3)';
           this.currentRect = rect;
+          this.currentRectIndex = i;
           break;
         }
       }
@@ -257,13 +287,15 @@ export default {
         // 新建
         const bufferCtx = this.bufferCanvas.getContext('2d');
         this.currentRect = new Rect(bufferCtx, this.dpr, mouseX, mouseY, this.scale);
-        this.rects.push(this.currentRect);
       } else if (this.currentRect) {
         // 拖动或缩放
         this.currentRect.mouseDown(mouseX, mouseY);
       }
     },
-    // 鼠标移动
+    /**
+     * 鼠标移动
+     * @param e 鼠标事件
+     */
     handleMouseMove(e) {
       // 获取鼠标在Canvas中的坐标
       const mouseX = e.offsetX;
@@ -292,14 +324,17 @@ export default {
         this.currentRect.mouseMove(e, this);
       }
       // 画布状态发生变化重新渲染
-      if(this.creating || this.currentRect) {
+      if (this.creating || this.currentRect) {
         // 清除离屏画布并重新绘制
         bufferCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.drawCanvas(); // 绘制背景和已有矩形
         ctx.drawImage(this.bufferCanvas, 0, 0);
       }
     },
-    // 鼠标抬起
+    /**
+     * 鼠标抬起
+     * @param e 鼠标事件
+     */
     handleMouseUp(e) {
       // 将离屏画布内容复制到主画布
       const ctx = this.canvas.getContext('2d');
@@ -308,8 +343,15 @@ export default {
         // 新建
         this.currentRect.maxX = e.offsetX;
         this.currentRect.maxY = e.offsetY;
+        // 矩形形状合法，加入到矩形集合
+        if (this.currentRect.minX !== this.currentRect.maxX
+            && this.currentRect.minY !== this.currentRect.maxY) {
+          this.rects.push(this.currentRect);
+          this.canvasChanged = true;
+        }
         this.creating = false;
         this.showNameInput = true;
+
         // 使用 Vue 的 $nextTick 来确保 DOM 已经更新
         // this.$nextTick(() => {
         //   // 找到对话框的 DOM 元素
@@ -323,40 +365,73 @@ export default {
         // });
       } else if (this.currentRect) {
         // 拖动或缩放
-        this.currentRect.mouseUp(e, this);
+        this.currentRect.mouseUp(this.currentImage.width, this.currentImage.height);
       }
+      // 清除 currentRect 以便重新开始绘制新的矩形
+      this.currentRect = null;
       // 最后绘制
       bufferCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       this.drawCanvas(); // 绘制背景和已有矩形
       ctx.drawImage(this.bufferCanvas, 0, 0);
-      // 清除 currentRect 以便重新开始绘制新的矩形
-      this.currentRect = null;
     },
-    // 图片缩放
-    zoom(step, fit) {
-      if(fit) {
-        // 自适应
-        this.scale = this.adaptiveScale;
-      } else {
-        this.scale += step;
-        // 放大
-        if (this.scale > this.maxScale) {
-          this.scale = this.maxScale;
+    // 保存标签
+    handleSaveLabel() {
+      this.rects.forEach(item => {
+        if(item.changed) {
+          item.changed = false;
+          const {x, y, w, h} = item.normalize(this.currentImage.width, this.currentImage.height);
+          console.log(x, y, w, h);
         }
-        // 缩小
-        if(this.scale < this.minScale) {
-          this.scale = this.minScale;
-        }
+      });
+      this.canvasChanged = false;
+    },
+    // 删除选中标签
+    handleDeleteLabel() {
+      this.rects.splice(this.currentRectIndex, 1);
+      this.labels.splice(this.currentRectIndex, 1);
+      this.drawCanvas();
+    },
+    /**
+     * 图片缩放
+     * @param scale 缩放率
+     */
+    zoom(scale) {
+      this.scale = scale;
+      // 过大
+      if (this.scale > this.maxScale) {
+        this.scale = this.maxScale;
+      }
+      // 过小
+      if (this.scale < this.minScale) {
+        this.scale = this.minScale;
       }
       this.loadImage();
     },
-    // 图片切换
-    handleImageToggle(offset) {
+    /**
+     * 图片切换
+     * @param offset 下标偏移量
+     */
+    handleImageSwitch(offset) {
+      if(this.canvasChanged) {
+        // 画布状态被改变，提示保存
+        this.showSaveAlert = true;
+        this.canvasChanged = false;
+      }
       this.rects.length = 0;
       const length = this.images.length;
       this.currentImageIndex = (this.currentImageIndex + offset + length) % length;
       this.scale = 0;
       this.loadImage();
+    },
+    // 筛选出位置信息发生变化的矩形
+    checkChanged() {
+      let changedRects = [];
+      this.rects.forEach(item => {
+        if(item.changed) {
+          changedRects.push(item);
+        }
+      });
+      this.canvasChanged = changedRects.length !== 0;
     },
   }
 };
