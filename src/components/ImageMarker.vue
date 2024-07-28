@@ -3,12 +3,12 @@
     <!-- 工具栏或控制栏 -->
     <el-form class="sidebar-left">
       <el-form-item>
-        <el-button type="primary" @click="handleImageSwitch(-1)">
+        <el-button type="primary" @click="handleImageSwitch(currentImageIndex - 1)">
           <i class="el-icon-caret-left"/>上一张
         </el-button>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="handleImageSwitch(1)">
+        <el-button type="primary" @click="handleImageSwitch(currentImageIndex + 1)">
           <i class="el-icon-caret-right"/>下一张
         </el-button>
       </el-form-item>
@@ -39,12 +39,18 @@
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="zoom(adaptiveScale)">
-          <i class="el-icon-zoom-out"/>自适应
+          <i class="el-icon-rank"/>自适应
         </el-button>
       </el-form-item>
       <el-form-item>
-        <span>缩放比例</span>
-        <el-input v-model="this.scale" disabled/>
+        <el-button size="small">
+          缩放率: {{ Math.round(scale * 100) / 100 }}
+        </el-button>
+      </el-form-item>
+      <el-form-item>
+        <el-button size="small">
+          x: {{ currentX }}, y: {{ currentY }}
+        </el-button>
       </el-form-item>
     </el-form>
     <!-- 展示图片的地方 -->
@@ -56,39 +62,64 @@
     </div>
     <!-- 右侧信息展示栏 -->
     <div class="sidebar-right">
-      <el-card class="tag-list">
-        <h3>标记列表</h3>
-        <p v-show="true">暂未创建标记</p>
-        <ul class="tag-list">
-          <!--          <li v-for="(tag, i) in tagList"
-                        :key="i"
-                        :class="i === selectedTagIndex ? 'li-selected' : 'li-normal'"
-                        @click="rectClick(i)">
-                      <span>{{ tag.name }}</span>
-                      <el-button size="mini" type="text" icon="el-icon-delete" @click="handleDeleteTag(i)"/>
-                      &lt;!&ndash;            <div>&ndash;&gt;
-                      &lt;!&ndash;              <el-button size="mini" type="text" icon="el-icon-edit" @click="handleEditTag(i)"/>&ndash;&gt;
-                      &lt;!&ndash;              <el-button size="mini" type="text" icon="el-icon-delete" @click="handleDeleteTag(i)"/>&ndash;&gt;
-                      &lt;!&ndash;            </div>&ndash;&gt;
-                    </li>-->
-        </ul>
+      <el-card class="label-list">
+        <div slot="header">
+          <span style="font-size: 18px; font-weight: bold;">标签列表</span>
+        </div>
+        <el-table
+            fit
+            :show-header="false"
+            :data="rects"
+            :cell-class-name="rectCellClass"
+            @cell-click="rectCellClick"
+            style="width: 100%">
+          <el-table-column
+              prop="name"
+              label="标签名"
+              width="160">
+          </el-table-column>
+          <el-table-column
+              label="操作"
+              width="80">
+            <template slot-scope="scope">
+              <el-button type="text"
+                         size="small"
+                         class="el-icon-edit"
+                         @click="handleEditLabel(scope.row)"/>
+              <el-button type="text"
+                         size="small"
+                         class="el-icon-delete"
+                         @click="handleDeleteLabel(scope.row)"/>
+            </template>
+          </el-table-column>
+        </el-table>
       </el-card>
-      <el-card class="path-list">
-        <h3>图片列表</h3>
-        <p>x: {{ this.currentX }}</p>
-        <p>y: {{ this.currentY }}</p>
-        <!--        <ul class="tag-list">
-                  <li v-for="(file, i) in files"
-                      :key="i"
-                      :class="i === currentImageIndex ? 'li-selected' : 'li-normal'"
-                      @click="fileClick(i)">
-                    {{ file }}
-                  </li>
-                </ul>-->
+      <el-card class="image-list">
+        <div slot="header">
+          <span style="font-size: 18px; font-weight: bold;">图片列表</span>
+        </div>
+        <el-table
+            fit
+            :show-header="false"
+            :data="images"
+            :cell-class-name="imageCellClass"
+            @cell-click="imageCellClick"
+            style="width: 100%">
+          <el-table-column
+              show-overflow-tooltip
+              prop="original_path"
+              label="图片路径"
+              width="240">
+          </el-table-column>
+        </el-table>
       </el-card>
     </div>
     <!-- 标签命名弹窗 -->
-    <el-dialog ref="myDialog" width="20vw" title="标签命名" :visible.sync="showNameInput" :modal="false">
+    <el-dialog width="20vw"
+               title="标签命名"
+               :modal="false"
+               :close-on-click-modal="false"
+               :visible.sync="showNameInput" >
       <el-form ref="tag">
         <el-form-item>
           <el-select
@@ -98,26 +129,30 @@
               default-first-option
               placeholder="请输入或选择已有标签名">
             <el-option
-                v-for="item in labels"
-                :key="item.name"
-                :label="item.name"
-                :value="item.name">
+                v-for="(item, i) in uniqueName"
+                :key="i"
+                :label="item"
+                :value="item">
             </el-option>
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button @click="showNameInput = false" type="primary">确认</el-button>
-          <el-button @click="showNameInput = false">取消</el-button>
+          <el-button size="mini" @click="handleInputLabel" type="primary">确认</el-button>
+          <el-button size="mini" @click="handleCancelInput">取消</el-button>
         </el-form-item>
       </el-form>
     </el-dialog>
     <!-- 提示保存弹窗 -->
-    <el-dialog width="20vw" title="是否保存改动？" :visible.sync="showSaveAlert" :modal="false">
+    <el-dialog width="20vw"
+               title="是否保存改动？"
+               :modal="false"
+               :close-on-click-modal="false"
+               :visible.sync="showSaveAlert" >
       <el-form ref="tag">
         <el-form-item>
-          <el-button @click="showSaveAlert = false" type="success">是</el-button>
-          <el-button @click="showSaveAlert = false" type="danger">否</el-button>
-          <el-button @click="showSaveAlert = false">取消</el-button>
+          <el-button size="mini" type="success" @click="handleSaveChange(true)">是</el-button>
+          <el-button size="mini" type="warning" @click="handleSaveChange(false)">否</el-button>
+          <el-button size="mini" type="default" @click="showSaveAlert = false">取消</el-button>
         </el-form-item>
       </el-form>
     </el-dialog>
@@ -133,10 +168,15 @@ export default {
     return {
       /* 图片相关 */
       images: [
-        require('@/assets/cat.jpg'),
-        require('@/assets/bay.jpg')
+        {
+          img_id: 1,
+          original_path: require('@/assets/cat.jpg'),
+        },
+        {
+          img_id: 2,
+          original_path: require('@/assets/bay.jpg'),
+        },
       ],
-      currentImageIndex: 0,
       /* 状态变量 */
       creating: false,
       canvasChanged: false,
@@ -157,14 +197,16 @@ export default {
       currentY: 0,
       /* 缓存 */
       currentImage: null,
+      currentImageIndex: 0,
+      targetImageIndex: -1,
       wrapper: null,
       canvas: null,
       bufferCanvas: null,
       currentRect: null,
-      currentRectIndex: -1,
+      selectedRect: null,
+      selectedRectIndex: -1,
       labelName: "", // 矩形标签
-      rects: [], // 保存所有绘制的矩形
-      labels: [], // 保存所有矩形标签
+      rects: [], // 保存当前图片的矩形
     };
   },
   mounted() {
@@ -178,7 +220,17 @@ export default {
   },
   computed: {
     imagePath() {
-      return this.images[this.currentImageIndex];
+      const path = "http://localhost:8000/static/" + this.images[this.currentImageIndex].original_path;
+      // return path;
+      return this.images[this.currentImageIndex].original_path;
+    },
+    uniqueName() {
+      // 去重后的标签名集合
+      let names = new Set();
+      this.rects.forEach(item => {
+        names.add(item.name);
+      });
+      return names;
     },
   },
   methods: {
@@ -230,16 +282,25 @@ export default {
       this.bufferCanvas.height = scaledHeight;
       this.bufferCanvas.style.width = `${scaledWidth / this.dpr}px`;
       this.bufferCanvas.style.height = `${scaledHeight / this.dpr}px`;
-      // 设置布局
-      if (this.wrapper.clientHeight <= scaledHeight) {
-        // 画布高度超过父元素视窗高度时，取消居中设置
-        this.wrapper.style.justifyContent = '';
-        this.wrapper.style.alignItems = '';
-      } else {
-        // 画布高度未超过父元素视窗高度时，重新居中设置
-        this.wrapper.style.justifyContent = 'center';
-        this.wrapper.style.alignItems = 'center';
-      }
+      // 设置居中
+      this.$nextTick(() => {
+        // 设置垂直居中
+        if (this.wrapper.clientHeight <= scaledHeight / this.dpr) {
+          // 画布高度超过父元素视窗高度时，取消居中设置
+          this.wrapper.style.justifyContent = '';
+        } else {
+          // 画布高度未超过父元素视窗高度时，重新居中设置
+          this.wrapper.style.justifyContent = 'center';
+        }
+        // 设置水平居中
+        if (this.wrapper.clientWidth <= scaledWidth / this.dpr) {
+          // 画布宽度超过父元素视窗宽度时，取消居中设置
+          this.wrapper.style.alignItems = '';
+        } else {
+          // 画布宽度未超过父元素视窗宽度时，重新居中设置
+          this.wrapper.style.alignItems = 'center';
+        }
+      });
     },
     // 绘制画布
     drawCanvas() {
@@ -251,35 +312,34 @@ export default {
       bufferCtx.clearRect(0, 0, width, height);
       bufferCtx.drawImage(this.currentImage, 0, 0, width, height);
       // 绘制已创建矩形
-      if(this.currentRect) {
+      if (this.currentRect) {
         this.currentRect.draw(this.scale);
       }
       for (const rect of this.rects) {
+        if (rect === this.selectedRect) {
+          rect.color = 'rgba(255, 0, 0, 0.3)';
+        } else {
+          rect.color = 'rgba(0, 0, 255, 0.3)';
+        }
         rect.draw(this.scale);
       }
       // 将缩放后的图片绘制到主画布
       ctx.drawImage(this.bufferCanvas, 0, 0, width, height);
     },
-    /**
-     * 鼠标按下
-     * @param e 鼠标事件
-     */
+    // 鼠标按下
     handleMouseDown(e) {
       const mouseX = e.offsetX;
       const mouseY = e.offsetY;
       this.prevX = mouseX;
       this.prevY = mouseY;
       // 找出被选中的矩形
-      this.currentRect = null;
-      if(this.currentRectIndex !== -1) {
-        this.rects[this.currentRectIndex].color = 'rgba(0, 0, 255, 0.3)';
-      }
+      this.selectedRect = null;
+      this.selectedRectIndex = -1;
       for (let i = this.rects.length - 1; i > -1; i--) {
         const rect = this.rects[i];
         if (rect.isSelected(mouseX, mouseY)) {
-          rect.color = 'rgba(255, 0, 0, 0.3)';
-          this.currentRect = rect;
-          this.currentRectIndex = i;
+          this.selectedRect = rect;
+          this.selectedRectIndex = i;
           break;
         }
       }
@@ -287,15 +347,12 @@ export default {
         // 新建
         const bufferCtx = this.bufferCanvas.getContext('2d');
         this.currentRect = new Rect(bufferCtx, this.dpr, mouseX, mouseY, this.scale);
-      } else if (this.currentRect) {
+      } else if (this.selectedRect) {
         // 拖动或缩放
-        this.currentRect.mouseDown(mouseX, mouseY);
+        this.selectedRect.mouseDown(mouseX, mouseY);
       }
     },
-    /**
-     * 鼠标移动
-     * @param e 鼠标事件
-     */
+    // 鼠标移动
     handleMouseMove(e) {
       // 获取鼠标在Canvas中的坐标
       const mouseX = e.offsetX;
@@ -303,7 +360,6 @@ export default {
       this.currentX = mouseX;
       this.currentY = mouseY;
       const ctx = this.canvas.getContext('2d');
-      const bufferCtx = this.bufferCanvas.getContext('2d');
       if (this.creating) {
         // 新建
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -319,82 +375,78 @@ export default {
         if (!this.currentRect) return;
         this.currentRect.maxX = mouseX;
         this.currentRect.maxY = mouseY;
-      } else if (this.currentRect) {
+      } else if (this.selectedRect) {
         // 拖动或缩放
-        this.currentRect.mouseMove(e, this);
+        this.selectedRect.mouseMove(e, this);
       }
       // 画布状态发生变化重新渲染
-      if (this.creating || this.currentRect) {
-        // 清除离屏画布并重新绘制
-        bufferCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      if (this.creating || this.selectedRect) {
         this.drawCanvas(); // 绘制背景和已有矩形
-        ctx.drawImage(this.bufferCanvas, 0, 0);
       }
     },
-    /**
-     * 鼠标抬起
-     * @param e 鼠标事件
-     */
+    // 鼠标抬起
     handleMouseUp(e) {
-      // 将离屏画布内容复制到主画布
-      const ctx = this.canvas.getContext('2d');
-      const bufferCtx = this.bufferCanvas.getContext('2d');
       if (this.creating) {
         // 新建
         this.currentRect.maxX = e.offsetX;
         this.currentRect.maxY = e.offsetY;
+        this.creating = false;
         // 矩形形状合法，加入到矩形集合
         if (this.currentRect.minX !== this.currentRect.maxX
             && this.currentRect.minY !== this.currentRect.maxY) {
-          this.rects.push(this.currentRect);
-          this.canvasChanged = true;
+          this.showNameInput = true;
         }
-        this.creating = false;
-        this.showNameInput = true;
-
-        // 使用 Vue 的 $nextTick 来确保 DOM 已经更新
-        // this.$nextTick(() => {
-        //   // 找到对话框的 DOM 元素
-        //   const dialog = this.$refs.myDialog.$el;
-        //   // 设置对话框的位置，以左上角为基准调整偏移量
-        //   dialog.style.position = 'absolute';
-        //   dialog.style.top = e.offsetY + 'px';
-        //   dialog.style.left = e.offsetX + 'px';
-        //
-        //   // 如果需要，你还可以添加过渡效果等
-        // });
-      } else if (this.currentRect) {
+      } else if (this.selectedRect) {
         // 拖动或缩放
-        this.currentRect.mouseUp(this.currentImage.width, this.currentImage.height);
+        this.selectedRect.mouseUp(this.currentImage.width, this.currentImage.height);
       }
-      // 清除 currentRect 以便重新开始绘制新的矩形
+      this.drawCanvas();
+    },
+    // 输入标签
+    handleInputLabel() {
+      this.currentRect.name = this.labelName;
+      this.rects.push(this.currentRect);
+      this.canvasChanged = true;
       this.currentRect = null;
-      // 最后绘制
-      bufferCtx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      this.drawCanvas(); // 绘制背景和已有矩形
-      ctx.drawImage(this.bufferCanvas, 0, 0);
+      this.showNameInput = false;
+      this.drawCanvas();
+    },
+    // 取消输入
+    handleCancelInput() {
+      this.currentRect = null;
+      this.showNameInput = false;
+      this.drawCanvas();
+    },
+    // 修改标签
+    handleEditLabel() {
+
     },
     // 保存标签
     handleSaveLabel() {
-      this.rects.forEach(item => {
-        if(item.changed) {
-          item.changed = false;
-          const {x, y, w, h} = item.normalize(this.currentImage.width, this.currentImage.height);
-          console.log(x, y, w, h);
-        }
-      });
-      this.canvasChanged = false;
+      if (this.canvasChanged) {
+        this.rects.forEach(item => {
+          if (item.changed) {
+            item.changed = false;
+            const {x, y, w, h} = item.normalize(this.currentImage.width, this.currentImage.height);
+          }
+        });
+        this.canvasChanged = false;
+      }
     },
     // 删除选中标签
     handleDeleteLabel() {
-      this.rects.splice(this.currentRectIndex, 1);
-      this.labels.splice(this.currentRectIndex, 1);
+      this.rects.splice(this.selectedRectIndex, 1);
       this.drawCanvas();
     },
-    /**
-     * 图片缩放
-     * @param scale 缩放率
-     */
+    // 标签发生变化
+    handleSaveChange(flag) {
+      this.showSaveAlert = false;
+      if(flag) {
+        this.handleSaveLabel();
+      }
+      this.executeSwitch();
+    },
+    // 图片缩放
     zoom(scale) {
       this.scale = scale;
       // 过大
@@ -407,37 +459,70 @@ export default {
       }
       this.loadImage();
     },
-    /**
-     * 图片切换
-     * @param offset 下标偏移量
-     */
-    handleImageSwitch(offset) {
-      if(this.canvasChanged) {
+    // 图片切换
+    handleImageSwitch(index) {
+      const length = this.images.length;
+      this.checkChanged();
+      this.targetImageIndex = (index + length) % length;
+      if (this.canvasChanged) {
         // 画布状态被改变，提示保存
         this.showSaveAlert = true;
-        this.canvasChanged = false;
+      } else {
+        this.executeSwitch();
       }
-      this.rects.length = 0;
-      const length = this.images.length;
-      this.currentImageIndex = (this.currentImageIndex + offset + length) % length;
+    },
+    // 执行切换
+    executeSwitch() {
+      this.canvasChanged = false;
+      this.rects = [];
+      this.currentImageIndex = this.targetImageIndex;
       this.scale = 0;
       this.loadImage();
     },
-    // 筛选出位置信息发生变化的矩形
+    // 判断画布状态是否发生变化
     checkChanged() {
-      let changedRects = [];
-      this.rects.forEach(item => {
-        if(item.changed) {
-          changedRects.push(item);
+      for (let i = 0; i < this.rects.length; i++) {
+        if (this.rects[i].changed) {
+          this.canvasChanged = true;
+          break;
         }
-      });
-      this.canvasChanged = changedRects.length !== 0;
+      }
+    },
+    // 标签所在行单元格样式
+    rectCellClass({row, column, rowIndex, columnIndex}) {
+      //利用单元格的样式的回调方法，给行列索引赋值
+      row.index = rowIndex;
+      column.index = columnIndex;
+      if (this.selectedRectIndex === rowIndex) {
+        return 'cell-clicked';
+      }
+      return '';
+    },
+    // 点击标签所在行
+    rectCellClick(row, column, cell, event) {
+      this.selectedRectIndex = row.index;
+      this.selectedRect = this.rects[row.index];
+      this.drawCanvas();
+    },
+    // 图片路径单元格格样式
+    imageCellClass({row, column, rowIndex, columnIndex}) {
+      //利用单元格的样式的回调方法，给行列索引赋值
+      row.index = rowIndex;
+      column.index = columnIndex;
+      if (this.currentImageIndex === rowIndex) {
+        return 'cell-clicked';
+      }
+      return '';
+    },
+    // 点击图片路径单元格
+    imageCellClick(row, column, cell, event) {
+      this.handleImageSwitch(row.index);
     },
   }
 };
 </script>
 
-<style>
+<style scoped>
 /* 布局相关 */
 .container {
   display: flex;
@@ -446,6 +531,7 @@ export default {
 
 .sidebar-left,
 .sidebar-right {
+  height: 100%;
   flex: 20%; /* 固定宽度的侧边栏 */
   padding: 1vw;
   overflow-y: auto; /* 如果内容溢出，显示滚动条 */
@@ -469,12 +555,17 @@ export default {
   box-shadow: 0 2px 4px rgba(0, 0, 0, .12), 0 0 6px rgba(0, 0, 0, .04);
 }
 
-.sidebar-right > .tag-list,
-.sidebar-right > .path-list {
-  flex: 1; /* 平分高度 */
+.sidebar-right > .label-list,
+.sidebar-right > .image-list {
+  flex: 50%; /* 平分高度 */
   overflow-y: auto; /* 内容溢出时显示滚动条 */
   margin-bottom: 10px;
   border-right: 1px solid #ccc;
   border-bottom: 1px solid #ccc;
+}
+
+/* 表格相关 */
+/deep/ .cell-clicked {
+  background: #fdf5e6 !important;
 }
 </style>
