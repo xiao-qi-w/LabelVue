@@ -1,6 +1,7 @@
 export default class Rect {
   constructor(ctx, dpr, startX, startY, scale) {
     this.name = 'undefined';
+    this.timestamp = Date.now();
     /* 绘制相关 */
     this.ctx = ctx;
     this.dpr = dpr;

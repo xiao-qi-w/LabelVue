@@ -1,70 +1,66 @@
 <template>
   <div class="container">
-    <!-- 工具栏或控制栏 -->
-    <el-form class="sidebar-left">
-      <el-form-item>
-        <el-button type="primary" @click="handleImageSwitch(currentImageIndex - 1)">
-          <i class="el-icon-caret-left"/>上一张
-        </el-button>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="handleImageSwitch(currentImageIndex + 1)">
-          <i class="el-icon-caret-right"/>下一张
-        </el-button>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="creating = !creating" :disabled="creating">
-          <i class="el-icon-collection-tag"/>创建标记
-        </el-button>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="danger" @click="handleDeleteLabel">
-          <i class="el-icon-collection-tag"/>删除标记
-        </el-button>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="success" @click="handleSaveLabel">
-          <i class="el-icon-download"/>保存标记
-        </el-button>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="zoom(scale + scaleStep)" :disabled="this.scale >= this.maxScale">
-          <i class="el-icon-zoom-in"/>放大
-        </el-button>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="zoom(scale - scaleStep)" :disabled="this.scale <= this.minScale">
-          <i class="el-icon-zoom-out"/>缩小
-        </el-button>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="zoom(adaptiveScale)">
-          <i class="el-icon-rank"/>自适应
-        </el-button>
-      </el-form-item>
-      <el-form-item>
-        <el-button size="small">
-          缩放率: {{ Math.round(scale * 100) / 100 }}
-        </el-button>
-      </el-form-item>
-      <el-form-item>
-        <el-button size="small">
-          x: {{ currentX }}, y: {{ currentY }}
-        </el-button>
-      </el-form-item>
-    </el-form>
-    <!-- 展示图片的地方 -->
-    <div ref="wrapper" class="canvas-wrapper">
-      <canvas ref="canvas"
-              @mousedown="handleMouseDown"
-              @mousemove="handleMouseMove"
-              @mouseup="handleMouseUp"/>
+    <!-- 左侧 -->
+    <div class="left">
+      <!-- 图片 -->
+      <div ref="wrapper" class="left-top">
+        <canvas ref="canvas"
+                @mousedown="handleMouseDown"
+                @mousemove="handleMouseMove"
+                @mouseup="handleMouseUp"/>
+      </div>
+      <!-- 工具栏 -->
+      <div class="left-bottom">
+        <el-tooltip effect="light" content="上一张" placement="top">
+          <el-button circle type="warning" @click="handleImageSwitch(currentImageIndex - 1)">
+            <i class="el-icon-caret-left"/>
+          </el-button>
+        </el-tooltip>
+        <el-tooltip effect="light" content="新建标记" placement="top">
+          <el-button circle type="primary" @click="creating = !creating" :disabled="creating">
+            <i class="el-icon-crop"/>
+          </el-button>
+        </el-tooltip>
+        <el-tooltip effect="light" content="保存标记" placement="top">
+          <el-button circle type="success" @click="handleSaveLabel">
+            <i class="el-icon-folder"/>
+          </el-button>
+        </el-tooltip>
+        <el-tooltip effect="light" content="删除标记" placement="top">
+          <el-button circle type="danger" @click="handleDeleteLabel" :disabled="selectedRectIndex === -1">
+            <i class="el-icon-delete"/>
+          </el-button>
+        </el-tooltip>
+        <el-tag type="plain" style="margin: 0 10px">
+          缩放率: {{ (Math.round(scale * 100) / 100).toFixed(2) }}
+        </el-tag>
+        <el-tooltip effect="light" content="放大" placement="top">
+          <el-button circle type="primary" @click="zoom(scale + scaleStep)" :disabled="this.scale >= this.maxScale">
+            <i class="el-icon-zoom-in"/>
+          </el-button>
+        </el-tooltip>
+        <el-tooltip effect="light" content="缩小" placement="top">
+          <el-button circle type="primary" @click="zoom(scale - scaleStep)" :disabled="this.scale <= this.minScale">
+            <i class="el-icon-zoom-out"/>
+          </el-button>
+        </el-tooltip>
+        <el-tooltip effect="light" content="自适应" placement="top">
+          <el-button circle type="primary" @click="zoom(adaptiveScale)">
+            <i class="el-icon-full-screen"/>
+          </el-button>
+        </el-tooltip>
+        <el-tooltip effect="light" content="下一张" placement="top">
+          <el-button circle type="warning" @click="handleImageSwitch(currentImageIndex + 1)">
+            <i class="el-icon-caret-right"/>
+          </el-button>
+        </el-tooltip>
+      </div>
     </div>
     <!-- 右侧信息展示栏 -->
-    <div class="sidebar-right">
+    <div class="right">
       <el-card class="label-list">
         <div slot="header">
-          <span style="font-size: 18px; font-weight: bold;">标签列表</span>
+          <span style="font-size: 16px; font-weight: bold;">标签列表</span>
         </div>
         <el-table
             fit
@@ -76,16 +72,12 @@
           <el-table-column
               prop="name"
               label="标签名"
-              width="160">
+              width="200">
           </el-table-column>
           <el-table-column
               label="操作"
-              width="80">
+              width="40">
             <template slot-scope="scope">
-              <el-button type="text"
-                         size="small"
-                         class="el-icon-edit"
-                         @click="handleEditLabel(scope.row)"/>
               <el-button type="text"
                          size="small"
                          class="el-icon-delete"
@@ -96,7 +88,7 @@
       </el-card>
       <el-card class="image-list">
         <div slot="header">
-          <span style="font-size: 18px; font-weight: bold;">图片列表</span>
+          <span style="font-size: 16px; font-weight: bold;">图片列表</span>
         </div>
         <el-table
             fit
@@ -107,25 +99,28 @@
             style="width: 100%">
           <el-table-column
               show-overflow-tooltip
-              prop="original_path"
+              prop="url"
               label="图片路径"
               width="240">
           </el-table-column>
         </el-table>
       </el-card>
+      <span>位置 x: {{ currentX }}, y: {{ currentY }}</span>
     </div>
     <!-- 标签命名弹窗 -->
-    <el-dialog width="20vw"
+    <el-dialog width="17vw"
                title="标签命名"
                :modal="false"
+               :before-close="handleCancelInput"
                :close-on-click-modal="false"
-               :visible.sync="showNameInput" >
+               :visible.sync="showNameInput">
       <el-form ref="tag">
         <el-form-item>
           <el-select
               v-model="labelName"
               filterable
               allow-create
+              clearable
               default-first-option
               placeholder="请输入或选择已有标签名">
             <el-option
@@ -143,11 +138,11 @@
       </el-form>
     </el-dialog>
     <!-- 提示保存弹窗 -->
-    <el-dialog width="20vw"
+    <el-dialog width="15vw"
                title="是否保存改动？"
                :modal="false"
                :close-on-click-modal="false"
-               :visible.sync="showSaveAlert" >
+               :visible.sync="showSaveAlert">
       <el-form ref="tag">
         <el-form-item>
           <el-button size="mini" type="success" @click="handleSaveChange(true)">是</el-button>
@@ -169,12 +164,12 @@ export default {
       /* 图片相关 */
       images: [
         {
-          img_id: 1,
-          original_path: require('@/assets/cat.jpg'),
+          id: 1,
+          url: require('@/assets/cat.jpg'),
         },
         {
-          img_id: 2,
-          original_path: require('@/assets/bay.jpg'),
+          id: 2,
+          url: require('@/assets/bay.jpg'),
         },
       ],
       /* 状态变量 */
@@ -220,9 +215,8 @@ export default {
   },
   computed: {
     imagePath() {
-      const path = "http://localhost:8000/static/" + this.images[this.currentImageIndex].original_path;
-      // return path;
-      return this.images[this.currentImageIndex].original_path;
+      // const path = "http://localhost:8000/static/" + this.images[this.currentImageIndex].url;
+      return this.images[this.currentImageIndex].url;
     },
     uniqueName() {
       // 去重后的标签名集合
@@ -243,7 +237,26 @@ export default {
       this.wrapper = this.$refs.wrapper;
       // 创建离屏画布
       this.bufferCanvas = document.createElement('canvas');
+      this.loadRects();
       this.loadImage();
+    },
+    // 加载已保存矩形标签
+    loadRects() {
+      // 从 session 中获取保存的信息
+      const storedRects = JSON.parse(sessionStorage.getItem(this.images[this.currentImageIndex].id));
+      if (storedRects !== null) {
+        const bufferCtx = this.bufferCanvas.getContext('2d');
+        storedRects.forEach(item => {
+          let rect = new Rect(bufferCtx, item.dpr, item.minX, item.minY, item.scale);
+          rect.changed = false;
+          rect.name = item.name;
+          rect.maxX = item.maxX;
+          rect.maxY = item.maxY;
+          rect.timestamp = item.timestamp;
+          rect.realScale = item.realScale;
+          this.rects.push(rect);
+        });
+      }
     },
     // 加载当前图片
     loadImage() {
@@ -404,9 +417,22 @@ export default {
     },
     // 输入标签
     handleInputLabel() {
-      this.currentRect.name = this.labelName;
-      this.rects.push(this.currentRect);
-      this.canvasChanged = true;
+      if (this.labelName !== "") {
+        this.$message({
+          showClose: true,
+          message: '创建成功',
+          type: 'success'
+        });
+        this.currentRect.name = this.labelName;
+        this.rects.push(this.currentRect);
+        this.canvasChanged = true;
+      } else {
+        this.$message({
+          showClose: true,
+          message: '名称不能为空',
+          type: 'error'
+        });
+      }
       this.currentRect = null;
       this.showNameInput = false;
       this.drawCanvas();
@@ -417,10 +443,6 @@ export default {
       this.showNameInput = false;
       this.drawCanvas();
     },
-    // 修改标签
-    handleEditLabel() {
-
-    },
     // 保存标签
     handleSaveLabel() {
       if (this.canvasChanged) {
@@ -428,20 +450,43 @@ export default {
           if (item.changed) {
             item.changed = false;
             const {x, y, w, h} = item.normalize(this.currentImage.width, this.currentImage.height);
+            // TODO 可以发送请求对归一化后的标签进行保存
+            console.log("归一化后的参数：", `x: ${x}, y: ${y}, h: ${w}, h: ${h}`);
           }
         });
         this.canvasChanged = false;
       }
+      sessionStorage.setItem(this.images[this.currentImageIndex].id, JSON.stringify(this.rects));
+      this.$message({
+        showClose: true,
+        message: '保存成功',
+        type: 'success'
+      });
     },
     // 删除选中标签
-    handleDeleteLabel() {
+    handleDeleteLabel(row) {
+      for (let i = 0; i < this.rects.length; i++) {
+        if (row.timestamp === this.rects[i].timestamp) {
+          this.selectedRectIndex = i;
+          break;
+        }
+      }
       this.rects.splice(this.selectedRectIndex, 1);
+      this.canvasChanged = true;
+      this.selectedRectIndex = -1;
+      this.$message({
+        showClose: true,
+        message: '删除成功',
+        type: 'success'
+      });
       this.drawCanvas();
     },
     // 标签发生变化
     handleSaveChange(flag) {
       this.showSaveAlert = false;
-      if(flag) {
+      if (flag) {
+        // 存入session
+        sessionStorage.setItem(this.images[this.currentImageIndex].id, JSON.stringify(this.rects));
         this.handleSaveLabel();
       }
       this.executeSwitch();
@@ -474,9 +519,10 @@ export default {
     // 执行切换
     executeSwitch() {
       this.canvasChanged = false;
-      this.rects = [];
       this.currentImageIndex = this.targetImageIndex;
+      this.rects = [];
       this.scale = 0;
+      this.loadRects();
       this.loadImage();
     },
     // 判断画布状态是否发生变化
@@ -523,48 +569,51 @@ export default {
 </script>
 
 <style scoped>
-/* 布局相关 */
 .container {
   display: flex;
-  height: 95vh; /* 占据整个视口高度 */
+  height: 95vh;
 }
 
-.sidebar-left,
-.sidebar-right {
+.left,
+.right {
   height: 100%;
-  flex: 20%; /* 固定宽度的侧边栏 */
+  flex: 20%;
   padding: 1vw;
-  overflow-y: auto; /* 如果内容溢出，显示滚动条 */
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
 
-.sidebar-left {
-  flex: 15%; /* 固定宽度的侧边栏 */
+.left {
+  flex: 80%;
 }
 
-.canvas-wrapper {
-  flex: 65%; /* 占据剩余空间 */
+.left-top {
+  flex: 90%;
   height: 94vh;
   margin-top: 3vh;
   display: flex;
   flex-direction: column;
   overflow: auto;
-  border-right: 1px solid #ccc;
-  border-bottom: 1px solid #ccc;
   box-shadow: 0 2px 4px rgba(0, 0, 0, .12), 0 0 6px rgba(0, 0, 0, .04);
 }
 
-.sidebar-right > .label-list,
-.sidebar-right > .image-list {
+.left-bottom {
+  margin-top: 1vh;
+  padding: 1vh;
+  display: flex;
+  justify-content: center;
+  justify-items: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .12), 0 0 6px rgba(0, 0, 0, .04);
+}
+
+.right > .label-list,
+.right > .image-list {
   flex: 50%; /* 平分高度 */
   overflow-y: auto; /* 内容溢出时显示滚动条 */
   margin-bottom: 10px;
-  border-right: 1px solid #ccc;
-  border-bottom: 1px solid #ccc;
 }
 
-/* 表格相关 */
 /deep/ .cell-clicked {
   background: #fdf5e6 !important;
 }
